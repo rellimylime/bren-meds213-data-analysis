@@ -40,13 +40,17 @@ sites_data <- read_csv(here(path_raw, sites_csv))
 eggs_data <- read_csv(here(path_raw, eggs_csv))
 
 species_data <- read_csv(here(path_raw, species_csv))
+
+nest_data <- read_csv(here(path_raw, nests_csv))
 ```
 
 
 Let's compute the number of eggs per nest. The column `Egg-num` seems to be a good candidate to estimate the number of eggs per nest:
 
 ```{r}
-eggs_sum <- eggs_data %>%
+eggs_sum <- eggs_data %>% 
+  group_by(Site, Year, Nest_ID) %>% 
+  summarise(n_egg = max(Egg_num))
   
 ```
 
@@ -54,13 +58,16 @@ Then we can join with the nest table to bring the species information:
 
 ```{r}
 nest_species <- eggs_sum %>%
-  
+  left_join(nest_data, join_by(Site, Year, Nest_ID))
 ```
 
 Now we can group by species:
 
 ```{r}
 nest_species_avg <- nest_species %>%
+  group_by(Species) %>% 
+  summarise(avg_egg_n = mean(n_egg)) %>% 
+  arrange(desc(avg_egg_n))
   
 ```
 
@@ -68,7 +75,7 @@ Finally it would be better to have the name of the species and not only the 4-le
 
 ```{r}
 nest_species_avg <- nest_species_avg %>%
-  
+  left_join(species_data, join_by(Species == Code))
 ```
 
 Let's put it all together:
@@ -94,7 +101,11 @@ Read the nest data in
 ```{r}
 nests_data <- read_csv(here(path_raw, nests_csv))
 
-glimpse(nests_data)
+glimpse(nests_data) 
+
+snow_cover <-  read_csv(here(path_processed, snowcover_csv))
+  
+glimpse(snow_cover)
 ```
 
 Yeah! `Date_found` is already in date format! We can thus directly aggregate the data by months:
@@ -117,14 +128,15 @@ glimpse(snowcover_data)
 The Date is stored as a character :/, we thus first we need to transform the date in date format before computing the monthly aggregate:
 
 ```{r}
-snowcover_data_fixed <- snowcover_data %>%
-  
+snowcover_data_fixed <- snow_cover %>%
+  mutate(Date2 = as_date(Date))
 ```
 
 We have 72 errors. Let's have a look at the date which failed:
 
 ```{r}
 snowcover_data_fixed %>% 
+  filter(is.na(Date2))
 
 ```
 
@@ -133,13 +145,16 @@ It is because 2 days were entered as one value `8&9 june 06`, it is not in the e
 
 ```{r}
 snowcover_data_fixed <- snowcover_data_fixed %>%
+  mutate(Date = ifelse(Date == "8&9 june 06", "08-June-06", Date)) %>% 
+  mutate(Date = as_date(Date))
   
+glimpse(snowcover_data_fixed)
 ```
 
 Mmm the Dates are not what we were expecting... It generally means there are different date types. Let's start by fixing the problematic dates before transforming it to the date format.
 
 ```{r}
-snowcover_data_fixed <- 
+#snowcover_data_fixed <- 
   
 ```
 
@@ -155,6 +170,9 @@ Now let's compute the monthly statistics
 ```{r}
 # adding the snow days with a threshold at 10%
 snowcover_month <- snowcover_data_fixed %>%
+  mutate(Month = month(Date2)) %>% 
+  group_by(Site, Month) %>% 
+  summarise(avg_snow_cover = mean(Snow_cover, na.rm = TRUE))
   
 ```
 
